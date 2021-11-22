@@ -1,0 +1,40 @@
+node("maven") {
+
+	def applicationName = null
+	def pomVersion = null
+	def pom = null
+
+	stage('Checkout') {
+    	git url: 'https://github.com/mrivasxvale/jenkins-cicd-demo.git', branch: 'main'
+  	}
+  	
+	stage('Gather build info') {
+		
+		applicationName = "jenkins-cicd-demo"
+		
+		pom = readMavenPom file: 'pom.xml'
+		pomVersion = pom.version
+	}
+
+    stage("Building ") {
+	    sh """
+    	  mvn package -DskipTests
+    	"""	
+    }
+
+    stage("Running tests"){
+	    sh """
+    	  mvn test
+    	"""
+    }
+    
+    stage("Build image") {
+	    sh """
+    	  oc new-build --binary=true --name='${applicationName}' registry.access.redhat.com/redhat-openjdk-18/openjdk18-openshift:1.8 --dry-run -o yaml | oc apply -f -
+    	  
+    	  oc start-build bc/'${applicationName}' --from-file=target/'${applicationName}-${pomVersion}.jar' --follow
+    	  
+    	  oc tag $applicationName:latest $applicationName:$pomVersion
+    	"""
+    }
+}

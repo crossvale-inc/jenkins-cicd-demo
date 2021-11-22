@@ -1,0 +1,15 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: jenkins-cicd-demo-ci-build
+spec:
+  runPolicy: Serial
+  source:
+    git:
+      ref: main
+      uri: https://github.com/mrivasxvale/jenkins-cicd-demo
+    type: Git
+  strategy:
+    jenkinsPipelineStrategy:
+      jenkinsfilePath: build-pipeline
+    type: JenkinsPipeline

@@ -1,0 +1,61 @@
+node {
+
+	def applicationName = env.IMAGE_NAME
+	def applicationVersion = env.IMAGE_VERSION
+	def projectName = env.IMAGE_NAMESPACE
+	
+	def baseFolder = '/tmp/workspace/' + env.JOB_NAME
+	
+	stage('Checkout') {
+		dir (baseFolder) {
+    		git url: 'https://github.com/mrivasxvale/jenkins-cicd-demo.git', branch: 'main'
+    	}
+  	}
+
+	stage('Deploy Application') {
+		dir (baseFolder) {
+    		sh """
+    			oc process -f ocp/deployment-template.yaml -p APPLICATION_NAME=$applicationName -p APPLICATION_VERSION=$applicationVersion -p PROJECT_NAME=$projectName | oc apply -f -
+    		
+    			oc rollout latest dc/$applicationName
+    		"""
+    	}
+  	}
+  	
+  	stage('Validate deployment') {
+  	
+		def rcVersion = sh(
+    		script: "oc get dc ${applicationName} -o jsonpath='{.status.latestVersion}'",
+    		returnStdout: true).trim()
+    		
+	  	def rcPhase = ""
+ 		def maxRetries = 20
+  		def retries = 0
+  		def rcRetries = 0
+		
+  		while (retries < maxRetries && rcRetries < maxRetries) {
+    		rcPhase =	sh(
+    		script: "oc get rc ${applicationName}-${rcVersion} -o jsonpath='{.metadata.annotations.openshift\\.io/deployment\\.phase}'",
+    		returnStdout: true).trim() 
+
+		    if (!rcPhase) {
+      			// The RC is not yet created
+      			rcRetries++
+    		} else {
+      			if (rcPhase == "Complete") {
+        			println "Deployment complete successfully"
+        			break
+      			}
+      
+		      retries++
+    		}
+
+    		println "Waiting 5s for the deployment to complete [retry RC: ${rcRetries} Deployment: ${retries} of ${maxRetries}]..."
+    		sleep 5
+  		}
+
+  		if (rcPhase != "Complete") {
+    		throw new Exception("The deployment of the application did not complete or it failed")
+  		}
+  	}
+}
